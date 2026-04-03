@@ -1,0 +1,234 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ORGANIZER
+  TIMEKEEPER
+  PILOT
+}
+
+enum SessionType {
+  PRACTICE
+  QUALIFY
+  HEAT
+  FINAL
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  CANCELED
+}
+
+enum ChampionshipStatus {
+  PENDING
+  CONFIRMED
+  CANCELED
+}
+
+enum EventStatus {
+  PENDING
+  CONFIRMED
+  CANCELED
+}
+
+enum TrackType {
+  KARTODROME
+  AUTODROME
+}
+
+enum SinglePointsPolicy {
+  SUM_ALL
+  FIRST_SESSION_PER_EVENT
+}
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  pilot     PilotProfile?
+}
+
+model PilotProfile {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @unique
+  name      String
+  number    Int
+  firstName String?
+  lastName  String?
+  country   String?
+  city      String?
+  age       Int?
+  phone     String?
+  emergencyPhone String?
+  license   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  registrations Registration[]
+  results   SessionResult[]
+  teamMembers TeamMember[]
+}
+
+model Championship {
+  id          String   @id @default(cuid())
+  name        String
+  season      Int
+  coverImagePath String?
+  status      ChampionshipStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  events      Event[]
+  categories  Category[]
+  teams       Team[]
+  @@unique([name, season], name: "name_season")
+}
+
+model Event {
+  id             String   @id @default(cuid())
+  name           String
+  date           DateTime
+  location       String?
+  trackType      TrackType?
+  circuitVariant String?
+  status         EventStatus @default(PENDING)
+  championship   Championship @relation(fields: [championshipId], references: [id])
+  championshipId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  sessions       Session[]
+  @@unique([name, championshipId], name: "name_championshipId")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  championship   Championship @relation(fields: [championshipId], references: [id])
+  championshipId String
+  entrySize CategoryEntrySize @default(SINGLE)
+  singlePointsPolicy SinglePointsPolicy @default(SUM_ALL)
+  motorOrigin   Origin @default(NACIONAL)
+  tireOrigin    Origin @default(NACIONAL)
+  chassisOrigin Origin @default(NACIONAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  registrations Registration[]
+  subcategories Subcategory[]
+  sessions Session[]
+  teams   Team[]
+  @@unique([name, championshipId], name: "name_championshipId_cat")
+}
+
+model Subcategory {
+  id         String   @id @default(cuid())
+  name       String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  sessions   Session[]
+  teams      Team[]
+  @@unique([name, categoryId], name: "name_categoryId_subcat")
+}
+
+enum CategoryEntrySize {
+  SINGLE   // 1 piloto
+  BINOMIO  // 2 pilotos
+  EQUIPO   // hasta 4 pilotos
+}
+
+enum Origin {
+  NACIONAL
+  IMPORTADO
+}
+
+model Registration {
+  id         String   @id @default(cuid())
+  pilot      PilotProfile @relation(fields: [pilotId], references: [id])
+  pilotId    String
+  category   Category @relation(fields: [categoryId], references: [id])
+  categoryId String
+  status     RegistrationStatus @default(PENDING)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Team {
+  id            String   @id @default(cuid())
+  championship  Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  championshipId String
+  category      Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId    String
+  subcategory   Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  subcategoryId String?
+  name          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  members       TeamMember[]
+}
+
+model TeamMember {
+  id            String   @id @default(cuid())
+  team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId        String
+  pilot         PilotProfile @relation(fields: [pilotId], references: [id], onDelete: Cascade)
+  pilotId       String
+  championshipId String
+  categoryId    String
+  order         Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@unique([teamId, pilotId], name: "unique_team_member")
+  @@unique([championshipId, categoryId, pilotId], name: "unique_pilot_per_category_team")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  event     Event    @relation(fields: [eventId], references: [id])
+  eventId   String
+  category  Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId String?
+  subcategory Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  subcategoryId String?
+  name      String
+  order     Int
+  type      SessionType
+  date      DateTime?
+  location  String?
+  published Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  results   SessionResult[]
+}
+
+model SessionResult {
+  id         String   @id @default(cuid())
+  session    Session  @relation(fields: [sessionId], references: [id])
+  sessionId  String
+  pilot      PilotProfile @relation(fields: [pilotId], references: [id])
+  pilotId    String
+  position   Int
+  lapTimeMs  Int?
+  secondBestLapMs Int?
+  totalTimeMs Int?
+  gapMs      Int?
+  gapText    String?
+  laps       Int?
+  points     Int?
+  penaltyMs  Int?      @default(0)
+  status     String    @default("CLASSIFIED")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  @@unique([sessionId, pilotId])
+}
